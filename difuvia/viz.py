@@ -20,6 +20,12 @@ UV_BLUE  = (0.094, 0.322, 0.616)
 UV_RED   = (0.800, 0.180, 0.180)
 
 
+def _label_panels(axes, fontsize=16):
+    for ax, letter in zip(np.ravel(axes), "abcdefgh"):
+        ax.text(0.0, 1.02, f"{letter})", transform=ax.transAxes,
+                fontsize=fontsize, fontweight="bold", va="bottom", ha="left")
+
+
 # ──────────────────────────────────────────────────────────────
 # R1: Dataset Validation
 # ──────────────────────────────────────────────────────────────
@@ -98,10 +104,11 @@ def plot_thermodynamic_observables(df, theory: dict, save_path: str = None):
         else:
             ax.scatter(T_mc, df[key], marker=marker, color=mc_col, s=60, zorder=2)
         ax.axvline(Tc, color="crimson", ls="--", alpha=0.7)
-        ax.set_xlabel("$T^*$", fontsize=12)
-        ax.set_ylabel(ylabel, fontsize=12)
-        ax.set_title(title, fontsize=13)
+        ax.set_xlabel("$T^*$", fontsize=16)
+        ax.set_ylabel(ylabel, fontsize=16)
         ax.grid(True, alpha=0.3)
+
+    _label_panels(axes)
 
     legend_handles = [
         mlines.Line2D([], [], color="gray", lw=2, label="Exact solution"),
@@ -111,10 +118,6 @@ def plot_thermodynamic_observables(df, theory: dict, save_path: str = None):
     fig.legend(handles=legend_handles, loc="lower center", ncol=3,
                fontsize=11, frameon=True, framealpha=0.9,
                edgecolor="#cccccc", bbox_to_anchor=(0.5, -0.04))
-    plt.suptitle(
-        rf"Monte Carlo (Wolff Algorithm) Dataset Validation ($L=64$, $N=1000$ samples/$T$)",
-        fontsize=14, y=1.01,
-    )
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, bbox_inches="tight", dpi=150)
@@ -157,9 +160,8 @@ def plot_eigenvalue_spectra(clean_data, sigma_star: float, save_path: str = None
     axes[0].axvline(np.max(eigvals_clean), color="orange", linestyle="-", linewidth=2,
                     label=f"$\\lambda_{{\\max}} = {np.max(eigvals_clean):.2f}$  "
                           f"($\\rho = {ratio_clean:.2f}$)")
-    axes[0].set_title("Initial Dataset", fontsize=12)
-    axes[0].set_xlabel("$\\lambda$", fontsize=11)
-    axes[0].set_ylabel("Density", fontsize=11)
+    axes[0].set_xlabel("$\\lambda$", fontsize=16)
+    axes[0].set_ylabel("Density", fontsize=16)
     axes[0].legend(fontsize=10)
     axes[0].grid(True, alpha=0.3)
 
@@ -170,13 +172,12 @@ def plot_eigenvalue_spectra(clean_data, sigma_star: float, save_path: str = None
     axes[1].axvline(np.max(eigvals_noisy), color="orange", linestyle="-", linewidth=2,
                     label=f"$\\lambda_{{\\max}} = {np.max(eigvals_noisy):.3f}$  "
                           f"($\\rho = {ratio_noisy:.3f}$)")
-    axes[1].set_title(f"After $\\sigma_1^* = {sigma_star:.2f}$ injection", fontsize=12)
-    axes[1].set_xlabel("$\\lambda$", fontsize=11)
-    axes[1].set_ylabel("Density", fontsize=11)
+    axes[1].set_xlabel("$\\lambda$", fontsize=16)
+    axes[1].set_ylabel("Density", fontsize=16)
     axes[1].legend(fontsize=10)
     axes[1].grid(True, alpha=0.3)
 
-    plt.suptitle("Eigenvalue Spectrum", fontsize=13, y=1.01)
+    _label_panels(axes)
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, bbox_inches="tight", dpi=150)
@@ -228,15 +229,13 @@ def plot_all_observables(
 
         ax.axvline(Tc, color="red", linestyle=":", alpha=0.5, linewidth=1,
                    label="$T_c$" if key == "M_mean" else "")
-        ax.set_xlabel("Temperature $T$", fontsize=11)
-        ax.set_ylabel(ylabel, fontsize=12)
-        ax.set_title(title, fontsize=12)
+        ax.set_xlabel(" $T^*$", fontsize=16)
+        ax.set_ylabel(ylabel, fontsize=16)
         ax.grid(True, alpha=0.3)
         if key == "M_mean":
             ax.legend(fontsize=8, ncol=2, loc="upper right")
 
-    plt.suptitle("Ablation Study — Thermodynamic Observables vs $T$\n"
-                 "($L=64$, $N=1000$ samples/T)", fontsize=13, y=1.01)
+    _label_panels(axes)
     plt.tight_layout()
     if save_path:
         plt.savefig(save_path, bbox_inches="tight", dpi=150)

@@ -119,6 +119,7 @@ def find_optimal_sigma_max(
     best_sigma : float  (optimal σ₁*)
     """
     import matplotlib.pyplot as plt
+    from difuvia.viz import _label_panels
 
     X_clean = clean_data.view(clean_data.shape[0], -1).cpu().numpy()
     test_sigmas   = np.geomspace(sigma_start, sigma_end, num=steps)
@@ -171,6 +172,7 @@ def find_optimal_sigma_max(
 
     if visualize:
         fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        _label_panels(axes)
         axes[0].plot(test_sigmas[:len(ratios_global)], ratios_global,
                      "o-", color=UV_BLUE, markersize=5, linewidth=1.5, label="Signal ratio $\\rho$")
         axes[0].axhline(1.0, color="red", linestyle="--", linewidth=1.5,
@@ -178,9 +180,8 @@ def find_optimal_sigma_max(
         axes[0].axvline(best_sigma, color=UV_GREEN, linestyle="--", linewidth=1.5,
                         label=f"$\\sigma_1^* = {best_sigma:.2f}$")
         axes[0].set_xscale("log")
-        axes[0].set_xlabel("$\\sigma$", fontsize=12)
-        axes[0].set_ylabel("$\\rho = \\lambda_{{\\max}} / \\lambda_+$", fontsize=12)
-        axes[0].set_title("Phase 2: Global Search", fontsize=12)
+        axes[0].set_xlabel("$\\sigma$", fontsize=16)
+        axes[0].set_ylabel("$\\rho = \\lambda_{{\\max}} / \\lambda_+$", fontsize=16)
         axes[0].legend(fontsize=10)
         axes[0].grid(True, which="both", alpha=0.4)
 
@@ -192,14 +193,11 @@ def find_optimal_sigma_max(
                             label="Pure noise limit ($\\rho = 1$)")
             axes[1].axvline(best_sigma, color=UV_BLUE, linestyle="--", linewidth=1.5,
                             label=f"$\\sigma_1^* = {best_sigma:.4f}$")
-            axes[1].set_xlabel("$\\sigma$", fontsize=12)
-            axes[1].set_ylabel("$\\rho = \\lambda_{{\\max}} / \\lambda_+$", fontsize=12)
-            axes[1].set_title("Phase 3: Local Refinement", fontsize=12)
+            axes[1].set_xlabel("$\\sigma$", fontsize=16)
+            axes[1].set_ylabel("$\\rho = \\lambda_{{\\max}} / \\lambda_+$", fontsize=16)
             axes[1].legend(fontsize=10)
             axes[1].grid(True, alpha=0.4)
 
-        plt.suptitle("$\\sigma_1$ Selection via Marchenko-Pastur Criterion",
-                     fontsize=13, y=1.01)
         plt.tight_layout()
         if save_fig:
             plt.savefig("figures/Fig_MP_search_curves.pdf", bbox_inches="tight", dpi=150)
