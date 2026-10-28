@@ -24,6 +24,7 @@ python experiments/r3_ablation.py \
 import os
 import argparse
 
+from difuvia.physics import get_theory_curves
 from difuvia.thermodynamics import load_mc_ground_truth, load_mc_correlation_at_tc
 from difuvia.sampling import load_offline_samples_and_compute
 from difuvia.analysis import print_ablation_table, fit_time_vs_nfe
@@ -125,8 +126,9 @@ def main():
 
     # 4. Figures
     print("\n[4/5] Generating figures...")
+    theory = get_theory_curves(T_min=min(TEMPERATURES) - 0.05, T_max=max(TEMPERATURES) + 0.05)
     plot_all_observables(
-        results, mc_gt, TEMPERATURES,
+        results, mc_gt, TEMPERATURES, theory=theory, highlight="E4",
         save_path=os.path.join(args.fig_dir, "Fig3_ablation_observables.pdf"),
     )
     if T_crit:

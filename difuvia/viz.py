@@ -104,8 +104,9 @@ def plot_thermodynamic_observables(df, theory: dict, save_path: str = None):
         else:
             ax.scatter(T_mc, df[key], marker=marker, color=mc_col, s=60, zorder=2)
         ax.axvline(Tc, color="crimson", ls="--", alpha=0.7)
-        ax.set_xlabel("$T^*$", fontsize=16)
-        ax.set_ylabel(ylabel, fontsize=16)
+        ax.set_xlabel("$T^*$", fontsize=22)
+        ax.set_ylabel(ylabel, fontsize=22)
+        ax.tick_params(axis="both", labelsize=16)
         ax.grid(True, alpha=0.3)
 
     _label_panels(axes)
@@ -193,50 +194,86 @@ def plot_all_observables(
     results: list,
     mc_ground_truth: dict,
     temperatures: list,
+    theory: dict = None,
+    highlight: str = None,
+    fade_others: bool = True,
     save_path: str = None,
 ):
     """
     Four-panel: thermodynamic observables vs T for each ablation experiment.
 
-    results: list of dicts from run_experiment or load_offline_samples_and_compute.
+    results  : list of dicts from run_experiment or load_offline_samples_and_compute.
+    theory   : optional dict from get_theory_curves(); drawn as the exact solution.
+    highlight: optional exp_id (e.g. "E4") drawn on top and emphasised; the
+               remaining experiments are faded unless fade_others=False.
     """
     T_arr  = sorted(temperatures)
-    colors = plt.cm.tab10(np.linspace(0, 1, len(results)))
+    # Palette spans only the non-highlighted runs so none shares the highlight red.
+    n_other = sum(r["exp_id"] != highlight for r in results)
+    palette = iter(plt.cm.tab10(np.linspace(0, 1, max(n_other, 1))))
+    colors  = [UV_RED if r["exp_id"] == highlight else next(palette) for r in results]
 
-    fig, axes = plt.subplots(2, 2, figsize=(16, 11))
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
     axes = axes.flatten()
 
     panels = [
-        ("M_mean", r"$\langle |m| \rangle$", "Mean Absolute Magnetization"),
-        ("E_mean", r"$\langle e \rangle$",    "Mean Energy per Spin"),
-        ("Cv",     r"$C_v$",                  "Specific Heat per Spin"),
-        ("Chi",    r"$\chi$",                  "Magnetic Susceptibility"),
+        ("M_mean", r"$\langle |m| \rangle$", "Mean Absolute Magnetization", "M"),
+        ("E_mean", r"$\langle e \rangle$",    "Mean Energy per Spin",        "E"),
+        ("Cv",     r"$C_v$",                  "Specific Heat per Spin",      "Cv"),
+        ("Chi",    r"$\chi$",                  "Magnetic Susceptibility",     "Chi"),
     ]
 
-    for ax, (key, ylabel, title) in zip(axes, panels):
+    for ax, (key, ylabel, title, th_key) in zip(axes, panels):
         T_mc    = [T for T in T_arr if T in mc_ground_truth]
         mc_vals = [mc_ground_truth[T][key] for T in T_mc]
         ax.plot(T_mc, mc_vals, "k-", linewidth=2.5, zorder=10,
                 label="Monte Carlo (ground truth)")
+        all_vals = list(mc_vals)
 
         for res, color in zip(results, colors):
             T_gen  = sorted(res["obs_per_temp"].keys())
             y_vals = [res["obs_per_temp"][T][key] for T in T_gen]
+            all_vals += y_vals
             label  = (f"{res['exp_id']}: M={res['M']}, "
                       f"K={res['K']}, $\\lambda_0$={res['lambda0']}")
-            ax.plot(T_gen, y_vals, "o--", color=color, linewidth=1.2,
-                    markersize=5, alpha=0.85, label=label)
+            if res["exp_id"] == highlight:
+                ax.plot(T_gen, y_vals, "D-", color=UV_RED, linewidth=3.5,
+                        markersize=10, markeredgecolor="black", markeredgewidth=1,
+                        zorder=12, label=label)
+            elif highlight is not None and fade_others:
+                ax.plot(T_gen, y_vals, "o--", color=color, linewidth=1.0,
+                        markersize=4, alpha=0.4, label=label)
+            else:
+                ax.plot(T_gen, y_vals, "o--", color=color, linewidth=2,
+                        markersize=7, alpha=0.85, label=label)
 
-        ax.axvline(Tc, color="red", linestyle=":", alpha=0.5, linewidth=1,
-                   label="$T_c$" if key == "M_mean" else "")
-        ax.set_xlabel(" $T^*$", fontsize=16)
-        ax.set_ylabel(ylabel, fontsize=16)
+        if theory is not None:
+            # Exact curves diverge at Tc (Cv, χ): keep y-limits on the data.
+            lo, hi = min(all_vals), max(all_vals)
+            pad = 0.08 * (hi - lo)
+            ax.plot(theory["T"], theory[th_key], "-", color="gray",
+                    linewidth=3, alpha=0.7, zorder=1, label="Exact solution")
+            ax.set_ylim(lo - pad, hi + pad)
+            ax.set_xlim(min(T_arr) - 0.05, max(T_arr) + 0.05)
+
+        ax.axvline(Tc, color="red", linestyle=":", alpha=0.5, linewidth=1.5,
+                   label=f"$T_c = {Tc:.4f}$")
+        ax.set_xlabel("$T^*$", fontsize=24)
+        ax.set_ylabel(ylabel, fontsize=24)
+        ax.tick_params(axis="both", labelsize=18)
         ax.grid(True, alpha=0.3)
-        if key == "M_mean":
-            ax.legend(fontsize=8, ncol=2, loc="upper right")
 
-    _label_panels(axes)
+    _label_panels(axes, fontsize=22)
     plt.tight_layout()
+
+    handles, labels = axes[0].get_legend_handles_labels()
+    leg = fig.legend(handles, labels, loc="upper center", ncol=4, fontsize=14,
+                     frameon=True, framealpha=0.9, edgecolor="#cccccc",
+                     bbox_to_anchor=(0.5, 0.0))
+    if highlight is not None:
+        for text in leg.get_texts():
+            if text.get_text().startswith(f"{highlight}:"):
+                text.set_fontweight("bold")
     if save_path:
         plt.savefig(save_path, bbox_inches="tight", dpi=150)
         print(f"Figure saved: {save_path}")
@@ -306,15 +343,15 @@ def plot_thermodynamic_comparison(
 ):
     """
     Four-panel thermodynamic comparison: MC, NCSNv2, DDPM vs exact theory.
-    Includes error bars (M_se, E_se) when available.
+    Includes error bars (M_se, E_se, Cv_se, Chi_se) when available.
     """
     T_arr = sorted(temperatures)
+    se_keys = {"M_mean": "M_se", "E_mean": "E_se", "Cv": "Cv_se", "Chi": "Chi_se"}
 
     def _get_vals(obs, key):
         T_vals = [T for T in T_arr if T in obs]
         means  = [obs[T][key] for T in T_vals]
-        se_key = key.replace("mean", "se").replace("Cv", "").replace("Chi", "")
-        ses    = [obs[T].get(se_key, 0) for T in T_vals]
+        ses    = [obs[T].get(se_keys[key], 0) for T in T_vals]
         return np.array(T_vals), np.array(means), np.array(ses)
 
     fig, axes = plt.subplots(2, 2, figsize=(15, 11))
@@ -348,15 +385,18 @@ def plot_thermodynamic_comparison(
 
         ax.axvline(Tc, color="red", linestyle=":", alpha=0.6, linewidth=1.2,
                    label=f"$T_c = {Tc:.4f}$" if key == "M_mean" else "")
-        ax.set_xlabel("$T^*$", fontsize=12)
-        ax.set_ylabel(ylabel, fontsize=13)
-        ax.set_title(title, fontsize=12)
+        ax.set_xlabel("$T^*$", fontsize=22)
+        ax.set_ylabel(ylabel, fontsize=22)
+        ax.set_title(title, fontsize=20)
+        ax.tick_params(axis="both", labelsize=16)
         ax.grid(True, alpha=0.3)
-        if key == "M_mean":
-            ax.legend(fontsize=9, loc="upper right")
 
-    plt.suptitle("Thermodynamic Fidelity Comparison", fontsize=13, y=1.01)
     plt.tight_layout()
+
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncol=3, fontsize=16,
+               frameon=True, framealpha=0.9, edgecolor="#cccccc",
+               bbox_to_anchor=(0.5, 0.0))
     if save_path:
         plt.savefig(save_path, bbox_inches="tight", dpi=150)
         print(f"Figure saved: {save_path}")
@@ -438,8 +478,16 @@ def plot_lattice_comparison(
     n_models    = len(model_names)
     n_T         = len(temperatures_show)
 
-    fig, axes = plt.subplots(n_models, n_T * n_samples,
-                             figsize=(n_T * n_samples * 2.2, n_models * 2.5))
+    # A narrow empty column between temperature groups holds the separator line.
+    spacer = 0.3
+    width_ratios = ([1] * n_samples + [spacer]) * n_T
+    width_ratios.pop()
+    fig, axes = plt.subplots(n_models, len(width_ratios),
+                             figsize=((n_T * n_samples + (n_T - 1) * spacer) * 2.2,
+                                      n_models * 2.5),
+                             gridspec_kw={"width_ratios": width_ratios})
+    for ax in axes.flat:
+        ax.axis("off")
 
     for row, name in enumerate(model_names):
         dataset = datasets[name]
@@ -448,21 +496,32 @@ def plot_lattice_comparison(
                 continue
             configs = dataset[T]
             for s in range(n_samples):
-                col = col_group * n_samples + s
+                col = col_group * (n_samples + 1) + s
                 ax  = axes[row, col]
                 sample = configs[s, 0]
                 if hasattr(sample, "numpy"):
                     sample = sample.numpy()
                 ax.imshow(sample, cmap="gray", vmin=-1, vmax=1,
                           interpolation="nearest")
-                ax.axis("off")
                 if row == 0 and s == n_samples // 2:
-                    ax.set_title(f"$T^*$={T:.2f}", fontsize=15)
+                    ax.set_title(f"$T^*$={T:.2f}", fontsize=22)
                 if col == 0:
                     ax.text(-0.15, 0.5, name, transform=ax.transAxes,
-                            fontsize=12, rotation=90, ha="right", va="center")
+                            fontsize=18, rotation=90, ha="right", va="center",
+                            multialignment="center")
 
+    _label_panels([axes[0, g * (n_samples + 1)] for g in range(n_T)], fontsize=22)
     plt.tight_layout()
+
+    # Positions are final only after the equal-aspect images are laid out.
+    fig.canvas.draw()
+    y0 = axes[-1, 0].get_position().y0
+    y1 = axes[0, 0].get_position().y1
+    for g in range(n_T - 1):
+        box = axes[0, g * (n_samples + 1) + n_samples].get_position()
+        x = (box.x0 + box.x1) / 2
+        fig.add_artist(Line2D([x, x], [y0, y1], transform=fig.transFigure,
+                              color="black", linewidth=1.5))
     if save_path:
         plt.savefig(save_path, bbox_inches="tight", dpi=300)
         print(f"Figure saved: {save_path}")
@@ -472,14 +531,12 @@ def plot_lattice_comparison(
 def plot_pareto(
     df_analysis,
     metric: str = "IPS",
-    ddpm_reference: dict = None,
     save_path: str = None,
 ):
     """
     Pareto frontier plot: inference time vs quality metric (IPS or W1_Dist).
 
     df_analysis     : DataFrame with columns 'Time(ms)', metric, 'Exp'
-    ddpm_reference  : optional dict with keys 'time_ms' and the metric value
     """
     from difuvia.analysis import pareto_frontier
 
@@ -510,15 +567,6 @@ def plot_pareto(
         ax.step(fx, fy, where="post", color=UV_RED,
                 linewidth=2, linestyle="--", alpha=0.7, label="Pareto frontier", zorder=3)
 
-    if ddpm_reference is not None:
-        ddpm_t = ddpm_reference["time_ms"]
-        ddpm_s = ddpm_reference[metric]
-        ax.scatter(ddpm_t, ddpm_s, color=UV_GREEN, s=150,
-                   marker="v", zorder=5, label="DDPM (baseline)")
-        ax.annotate("DDPM", (ddpm_t, ddpm_s),
-                    textcoords="offset points", xytext=(0, 8),
-                    fontsize=9, color=UV_GREEN, fontweight="bold")
-
     legend_elements = [
         Line2D([0], [0], marker="D", color="w", markerfacecolor=UV_RED,
                markersize=10, label="Pareto-optimal"),
@@ -526,14 +574,11 @@ def plot_pareto(
                markersize=9, label="PC Sampler configurations"),
         Line2D([0], [0], linestyle="--", color=UV_RED, linewidth=2, label="Pareto frontier"),
     ]
-    if ddpm_reference is not None:
-        legend_elements.append(
-            Line2D([0], [0], marker="v", color="w", markerfacecolor=UV_GREEN,
-                   markersize=10, label="DDPM (baseline)")
-        )
     ax.legend(handles=legend_elements, fontsize=14, loc="upper right")
-    ax.set_xlabel("Inference time (ms)", fontsize=15)
-    ax.set_ylabel(metric, fontsize=15)
+    ax.set_xlabel("Inference time (ms)", fontsize=22)
+    ylabels = {"W1_Dist": r"$\bar{W}_1$"}
+    ax.set_ylabel(ylabels.get(metric, metric), fontsize=22)
+    ax.tick_params(axis="both", labelsize=18)
     ax.grid(True, alpha=0.3)
     ax.set_xlim(left=0)
     ax.set_ylim(bottom=0)

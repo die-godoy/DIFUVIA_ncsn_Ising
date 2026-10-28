@@ -6,6 +6,7 @@ truth), computes thermodynamic observables with bootstrap standard errors, print
 TABLE 4, and generates:
 
   - Fig4_thermodynamic_comparison.pdf   — 4-panel thermodynamics vs exact theory
+  - Fig4.1_thermodynamic_comparison_bootstrap.pdf — same, with bootstrap SE on all four observables
   - Fig5_lattice_comparison.pdf         — visual lattice grid across models
   - Fig6_correlation_comparison.pdf     — log-log G(r) at Tc
   - Fig7_pareto_IPS.pdf                 — Pareto frontier (time vs IPS)
@@ -41,8 +42,9 @@ warnings.filterwarnings("ignore")
 
 import torch
 
-from difuvia.physics import Tc, get_theory_curves
+from difuvia.physics import get_theory_curves
 from difuvia.thermodynamics import (
+    bootstrap_errors,
     compute_observables,
     compute_spin_correlation,
     load_mc_ground_truth,
@@ -124,23 +126,6 @@ def load_samples(directory: str, temperatures: list) -> dict:
     found = sorted(dataset.keys())
     print(f"  Loaded {len(found)} temperatures from {directory}: {found}")
     return dataset
-
-
-def load_avg_gen_time_ms(directory: str, temperatures: list) -> float:
-    """Average 'gen_time_ms' metadata stored in per-temperature .pt files. NaN if unavailable."""
-    times = []
-    for T in temperatures:
-        candidates = [
-            os.path.join(directory, f"T{T:.2f}.pt"),
-            os.path.join(directory, f"samples_T{T:.2f}.pt"),
-        ]
-        for fpath in candidates:
-            if os.path.exists(fpath):
-                data = torch.load(fpath, map_location="cpu", weights_only=False)
-                if isinstance(data, dict) and "gen_time_ms" in data:
-                    times.append(data["gen_time_ms"])
-                break
-    return float(np.mean(times)) if times else float("nan")
 
 
 def generate_ncsn_samples(checkpoint: str, config_path: str, n_samples: int,
@@ -227,6 +212,11 @@ def main():
                         help="Checkpoint path (used only if --ncsn_dir is not provided)")
     parser.add_argument("--n_samples",   type=int, default=1000)
     parser.add_argument("--n_bootstrap", type=int, default=0)
+    parser.add_argument("--n_bootstrap_se", type=int, default=1000,
+                        help="Bootstrap resamples for the Fig4.1 error bars")
+    parser.add_argument("--lattice_temps", type=float, nargs="+",
+                        default=[1.77, 1.97, 2.07],
+                        help="Temperatures shown in the Fig5 lattice grid")
     parser.add_argument("--fig_dir",     default="figures")
     parser.add_argument("--table_dir",   default="tables")
     parser.add_argument("--experiment_name", default="E4",
@@ -263,13 +253,11 @@ def main():
     print("\n[3/7] Preparing DDPM samples...")
     if args.ddpm_dir and os.path.isdir(args.ddpm_dir):
         ddpm_dataset = load_samples(args.ddpm_dir, TEMPERATURES)
-        ddpm_avg_time_ms = load_avg_gen_time_ms(args.ddpm_dir, TEMPERATURES)
     else:
         print("  [Warning] --ddpm_dir not provided or does not exist. "
               "Using MC ground truth as DDPM placeholder (for testing only).")
         ddpm_dataset = {T: torch.from_numpy(mc_dataset[T]).unsqueeze(1).float()
                         for T in TEMPERATURES if T in mc_dataset}
-        ddpm_avg_time_ms = float("nan")
 
     # 4. Compute observables
     print(f"\n[4/7] Computing observables (n_bootstrap={args.n_bootstrap})...")
@@ -304,17 +292,25 @@ def main():
         save_path=os.path.join(args.fig_dir, "Fig4_thermodynamic_comparison.pdf"),
     )
 
-    # Fig 5: lattice grid
-    temperatures_show = [
-        min(TEMPERATURES),
-        min(TEMPERATURES, key=lambda t: abs(t - Tc)),
-        max(TEMPERATURES),
+    # Fig 4.1: same comparison, bootstrap SE on all four observables
+    obs_bs = [
+        {T: {**obs[T], **bootstrap_errors(obs[T], T, IMAGE_SIZE, args.n_bootstrap_se)}
+         for T in obs}
+        for obs in (mc_gt, obs_ncsn, obs_ddpm)
     ]
+    plot_thermodynamic_comparison(
+        *obs_bs, theory, TEMPERATURES,
+        experiment_name=args.experiment_name,
+        save_path=os.path.join(args.fig_dir, "Fig4.1_thermodynamic_comparison_bootstrap.pdf"),
+    )
+
+    # Fig 5: lattice grid
+    temperatures_show = args.lattice_temps
     mc_tensor = {T: torch.from_numpy(mc_dataset[T]).unsqueeze(1).float()
                  for T in temperatures_show if T in mc_dataset}
     datasets_vis = {
-        "Monte Carlo (Wolff)": mc_tensor,
-        f"NCSNv2-PIPC ({args.experiment_name})": ncsn_dataset,
+        "Monte Carlo\n(Wolff)": mc_tensor,
+        f"NCSNv2-PIPC\n({args.experiment_name})": ncsn_dataset,
         "DDPM": ddpm_dataset,
     }
     plot_lattice_comparison(
@@ -342,23 +338,20 @@ def main():
         save_path=os.path.join(args.fig_dir, "Fig6_correlation_comparison.pdf"),
     )
 
-    # 7. Pareto plots (single-point reference for DDPM)
+    # 7. Pareto plots
     print("\n[7/7] Generating Pareto plots...")
     import pandas as pd
     ablation_table_path = os.path.join(args.table_dir, "Table_ablation_normalized.csv")
     if os.path.exists(ablation_table_path):
         df_ab = pd.read_csv(ablation_table_path)
-        ddpm_ref_ips = {"time_ms": ddpm_avg_time_ms, "IPS": ips_ddpm}
-        ddpm_ref_w1  = {"time_ms": ddpm_avg_time_ms, "W1_Dist": w1_ddpm}
 
-        for metric, ref in [("IPS", ddpm_ref_ips), ("W1_Dist", ddpm_ref_w1)]:
+        for metric in ["IPS", "W1_Dist"]:
             if metric in df_ab.columns and "Time(ms)" in df_ab.columns:
                 df_plot = df_ab[["Exp", metric, "Time(ms)"]].copy()
                 df_plot[metric]     = df_plot[metric].astype(float)
                 df_plot["Time(ms)"] = df_plot["Time(ms)"].astype(float)
                 plot_pareto(
                     df_plot, metric=metric,
-                    ddpm_reference=ref,
                     save_path=os.path.join(args.fig_dir, f"Fig_{7 + ['IPS','W1_Dist'].index(metric)}_pareto_{metric}.pdf"),
                 )
     else:

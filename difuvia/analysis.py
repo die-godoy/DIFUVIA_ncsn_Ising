@@ -295,7 +295,7 @@ def print_ablation_table(
     csv_path: str = "tables/Table_ablation_normalized.csv",
 ) -> pd.DataFrame:
     """
-    Print TABLE 3: sampler sensitivity analysis — nRMSE, W1, IPS, NFE, time.
+    Print TABLE 3: sampler sensitivity analysis — nRMSE, W1, IPS, time.
 
     results      : list of dicts from run_experiment or load_offline_samples_and_compute.
     ddpm_time_ms : if given, adds a Speedup column = ddpm_time_ms / config_time_ms
@@ -304,7 +304,7 @@ def print_ablation_table(
     hardware     : hardware string (e.g. 'mps') reported in the header.
     csv_path     : where to save the CSV (separate physics-free runs use a different path).
 
-    NFE per config is the closed form M*(K+1) (see difuvia.nfe).
+    NFE is reported separately in tables/Table_flops.csv (see experiments/measure_flops.py).
     Time(ms) is per sample: total batch time / number of samples.
     """
     T_vals = sorted([T for T in temperatures if T in mc_ground_truth])
@@ -337,14 +337,12 @@ def print_ablation_table(
         w1_int    = float(np.nanmean(w1_m_list + w1_e_list))
         ips       = 0.30 * nrmse_M + 0.30 * nrmse_E + 0.20 * nrmse_Cv + 0.20 * nrmse_Chi
         gen_time  = res.get("gen_time_ms", float("nan"))
-        nfe       = nfe_pipc(res["M"], res["K"])
 
         row = {
             "Exp":       res["exp_id"],
             "M":         res["M"],
             "K":         res["K"],
             "λ₀":        res["lambda0"],
-            "NFE":       nfe,
             "nRMSE_M":   f"{nrmse_M:.4f}",
             "nRMSE_E":   f"{nrmse_E:.4f}",
             "nRMSE_Cv":  f"{nrmse_Cv:.4f}",
@@ -354,14 +352,13 @@ def print_ablation_table(
             "Time(ms)":  f"{gen_time:.2f}",
             "_IPS":      ips,
             "_Time":     gen_time,
-            "_NFE":      nfe,
         }
         if ddpm_time_ms is not None and gen_time and gen_time == gen_time and gen_time > 0:
             row["Speedup"] = f"{ddpm_time_ms / gen_time:.1f}x"
         rows.append(row)
 
     df = pd.DataFrame(rows).sort_values(by=["_IPS", "_Time"], ascending=True)
-    display_cols = ["Exp", "M", "K", "λ₀", "NFE", "nRMSE_M", "nRMSE_E",
+    display_cols = ["Exp", "M", "K", "λ₀", "nRMSE_M", "nRMSE_E",
                     "nRMSE_Cv", "nRMSE_Chi", "W1_Dist", "IPS", "Time(ms)"]
     if "Speedup" in df.columns:
         display_cols.append("Speedup")
@@ -372,8 +369,7 @@ def print_ablation_table(
         header_bits.append(f"DDPM baseline={ddpm_time_ms:.1f} ms/sample")
     print("\n" + "=" * 115)
     print("TABLE 3: Sampler Sensitivity Analysis — Normalized & Distributional Metrics")
-    print("  NFE = M*(K+1) network evals/sample | Time(ms) = per sample | "
-          + " | ".join(header_bits))
+    print("  Time(ms) = per sample | " + " | ".join(header_bits))
     print("=" * 115)
     print(df[display_cols].to_string(index=False))
     print("=" * 115)

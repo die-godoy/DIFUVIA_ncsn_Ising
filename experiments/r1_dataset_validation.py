@@ -23,7 +23,12 @@ warnings.filterwarnings("ignore")
 
 from difuvia.physics import Tc, get_theory_curves
 from difuvia.thermodynamics import load_all_temperatures, load_mc_ground_truth, compute_spin_correlation
-from difuvia.viz import plot_representative_lattices, plot_thermodynamic_observables
+from difuvia.viz import (
+    UV_BLUE,
+    plot_representative_lattices,
+    plot_spin_correlation_comparison,
+    plot_thermodynamic_observables,
+)
 import torch
 
 
@@ -122,6 +127,18 @@ def main():
     configs_tc = torch.tensor(dataset[T_crit]).unsqueeze(1)
     r_vals, G_r = compute_spin_correlation(configs_tc)
     print(f"  G(r) computed over {len(r_vals)} radial bins.")
+    plot_spin_correlation_comparison(
+        {"Monte Carlo (Wolff)": {T_crit: configs_tc}},
+        labels=["Monte Carlo (Wolff)"],
+        colors=[UV_BLUE],
+        markers=["o"],
+        T_crit=T_crit,
+        L=args.L,
+        save_path=os.path.join(args.fig_dir, "Fig3_spin_correlation_mc.pdf"),
+    )
+    gr_path = os.path.join(args.table_dir, "Table_spin_correlation_mc.csv")
+    pd.DataFrame({"r": r_vals, "G_r": G_r}).to_csv(gr_path, index=False)
+    print(f"  G(r) table saved: {gr_path}")
 
     # 6. Export table
     print("\n[5/5] Exporting results table...")

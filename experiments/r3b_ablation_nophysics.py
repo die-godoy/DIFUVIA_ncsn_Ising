@@ -45,6 +45,10 @@ PHYSFREE_GRID = [
 
 NOPHYS_DIR = "ablation_samples_nophysics"
 
+# Physics-guided reference from the main ablation (r3_ablation.py), overlaid
+# on the observables figure only; it is not part of the A1–A3 table.
+E4_CONFIG = {"id": "E4", "M": 150, "K": 3, "lambda0": 0.2}
+
 
 def main():
     parser = argparse.ArgumentParser(description="R3b: physics-free (λ₀=0) ablation")
@@ -54,6 +58,8 @@ def main():
     parser.add_argument("--config",     default="ncsnv2/configs/ising.yml")
     parser.add_argument("--data_dir",   default="train_data")
     parser.add_argument("--save_dir",   default=NOPHYS_DIR)
+    parser.add_argument("--ablation_dir", default="ablation_samples",
+                        help="Physics-guided E1–E12 samples; E4 is overlaid on the figure.")
     parser.add_argument("--n_samples",  type=int, default=1000)
     parser.add_argument("--fig_dir",    default="figures")
     parser.add_argument("--table_dir",  default="tables")
@@ -114,8 +120,14 @@ def main():
 
     # Figures + table (separate CSV so E1–E12 output is untouched).
     print("\n[3/4] Generating figures...")
+    ensure_data([args.ablation_dir])
+    e4_results = load_offline_samples_and_compute(
+        hyperparameter_grid=[E4_CONFIG], temperatures=TEMPERATURES,
+        mc_ground_truth=mc_gt, image_size=IMAGE_SIZE, save_dir=args.ablation_dir,
+    )
     plot_all_observables(
-        results, mc_gt, TEMPERATURES,
+        results + e4_results, mc_gt, TEMPERATURES,
+        highlight="E4", fade_others=False,
         save_path=os.path.join(args.fig_dir, "Fig3b_nophysics_observables.pdf"),
     )
     if T_crit:

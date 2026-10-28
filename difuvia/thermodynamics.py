@@ -79,6 +79,34 @@ def compute_observables(
     }
 
 
+def bootstrap_errors(obs: dict, T: float, L: int = 64,
+                     n_bootstrap: int = 1000, seed: int = 0) -> dict:
+    """
+    Bootstrap standard errors of <|m|>, <e>, Cv and Chi.
+
+    Each resample draws N configurations with replacement from the per-sample
+    values stored in `obs` (from compute_observables) and recomputes all four
+    observables on it; the SE is the std of each over the resamples.
+
+    Returns dict with M_se, E_se, Cv_se, Chi_se.
+    """
+    N_spins = L * L
+    m, e = obs["m_signed"], obs["e_vals"]
+    n = len(m)
+    idx = np.random.default_rng(seed).integers(0, n, (n_bootstrap, n))
+    m_b, e_b = m[idx], e[idx]
+
+    M_b   = np.abs(m_b).mean(axis=1)
+    E_b   = e_b.mean(axis=1)
+    Cv_b  = (N_spins / T ** 2) * e_b.var(axis=1, ddof=1)
+    Chi_b = np.maximum((N_spins / T) * ((m_b ** 2).mean(axis=1) - M_b ** 2), 0.0)
+
+    return {
+        "M_se": float(M_b.std()), "E_se": float(E_b.std()),
+        "Cv_se": float(Cv_b.std()), "Chi_se": float(Chi_b.std()),
+    }
+
+
 def compute_spin_correlation(configs_tensor: torch.Tensor):
     """
     Isotropic connected spin-spin correlation G(r) via FFT (Wiener-Khinchin).
